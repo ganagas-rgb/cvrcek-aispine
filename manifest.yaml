@@ -1,0 +1,246 @@
+apiVersion: ai.nervovy.system/v1
+kind: AISpine
+
+metadata:
+  name: cvrcek-ai-spine
+  verzia: 1.0
+
+  description: >
+    AISpine (Cvrček) je architektonický model pre riadenie modulárnych AI systémov.
+    Systém je navrhnutý ako rekurzívna, zero-trust infraštruktúra, kde CAI (Control AI)
+    slúži ako riadiaca vrstva. WRK moduly sú autonómne, komunikujú cez CAI,
+    a ich stav a výkon je sledovaný kontrolorom.
+
+  license: >
+    Apache 2.0 – otvorený architektonický koncept. Bez patentových nárokov.
+
+  notice: >
+    Manifest definuje princípy a architektúru, nie implementáciu.
+    Projekt vznikol ako osobná iniciatíva mimo pracovného pomeru.
+
+
+spec:
+
+  # =========================
+  # ARCHITEKTÚRNE PRINCÍPY
+  # =========================
+  model:
+    architecture: "recursive-ai-spine"
+
+    principles:
+      - everyModuleHasRRID
+      - everyModuleHasHeartbeat
+      - CAIIsControlPlaneNotExecutor
+      - WRKAutonomyWithinPolicy
+      - controlDoesNotImplyTrust
+      - noAIHasAuthorityToBlock
+      - noAIAltersSemanticContent
+      - AIActionsAreObservableOnly
+
+
+  # =========================
+  # CAI – Control Plane
+  # =========================
+  cai:
+    type: "MSR-as-WRK"
+    role: "centrálna miecha systému"
+
+    capabilities:
+      - requestRouting
+      - policyValidation
+      - auditForwarding
+
+    constraints:
+      - noExecutionRights
+      - noPayloadInterpretation
+      - cannotBlockRequests
+
+    properties:
+      - hasRRID
+      - hasHeartbeat
+      - isAlsoWRK
+
+
+  # =========================
+  # KONTROLOR – registry a stav systému
+  # =========================
+  kontrolor:
+    type: WRK
+    role: "observability, registry, scoring"
+
+    responsibilities:
+      - maintainRegistry
+      - trackHeartbeat
+      - evaluatePerformance
+      - calculateScore
+      - publishStatus
+
+    registry:
+      data:
+        - rrid
+        - capabilities
+        - status
+        - score
+
+      lifecycle:
+        - unknown
+        - detected
+        - registered
+        - approved
+        - active
+        - degraded
+        - saturated
+        - offline
+
+    scoring:
+      metrics:
+        - reliability
+        - latency
+        - capacity
+        - successRate
+
+      rules:
+        - scoreUpdatedContinuously
+        - decayOnFailure
+
+    constraints:
+      - cannotExecuteActions
+      - cannotBlockModules
+
+
+  # =========================
+  # WRK – vykonávacie moduly
+  # =========================
+  wrk:
+    type: "ai-module"
+
+    properties:
+      - autonomousExecution
+      - canActAsCAI
+
+    identity:
+      rridFormat: "node|pod|ai_name|timestamp"
+
+      rules:
+        - rridGeneratedByWRK
+        - timestampIsFirstHeartbeat
+        - rridIsImmutable
+
+
+  # =========================
+  # KOMUNIKÁCIA
+  # =========================
+  communication:
+    model: "envelope-payload"
+
+    rules:
+      - CAIProcessesEnvelopeOnly
+      - WRKDefinesPayload
+      - payloadOpaqueToCAI
+      - allCommunicationViaCAI
+      - allRequestsPassGatekeeper
+      - requestsAreNotAutomaticallyBlocked
+
+
+  # =========================
+  # DISCOVERY & ROUTING
+  # =========================
+  discovery:
+    model: "capability-based"
+
+    rules:
+      - matchRequirementsToCapabilities
+      - preferLessLoadedWRK
+      - considerScore
+      - fallbackToOtherCAI
+
+
+  # =========================
+  # HEARTBEAT
+  # =========================
+  heartbeat:
+    model:
+      type: "out-of-band"
+      purpose: "liveness signal"
+
+    rules:
+      - minimalPayload
+      - highFrequency
+      - noCapabilitiesIncluded
+
+
+  # =========================
+  # AUDIT
+  # =========================
+  audit:
+    authority: kontrolor
+
+    rules:
+      - allRequestsLogged
+      - rridTracked
+
+
+  # =========================
+  # VRÁTNIK – Gatekeeper
+  # =========================
+  vratnik:
+    type: WRK
+    role: "vstupná brána systému"
+
+    responsibilities:
+      - validateRequest
+      - sanitizeInput
+      - maskSensitiveData
+
+    rules:
+      - doesNotChangeSemanticMeaning
+      - preservesOriginalIntent
+
+    constraints:
+      - cannotExecuteActions
+      - cannotModifySystemState
+      - cannotBlockRequests
+
+
+  # =========================
+  # GUARDIAN – audit bezpečnosti
+  # =========================
+  guardian:
+    type: WRK
+    role: "bezpečnostný audit a monitoring"
+
+    responsibilities:
+      - analyzeActivity
+      - detectAnomalies
+      - reportFindings
+
+    constraints:
+      - cannotExecuteActions
+      - cannotBlockActions
+      - cannotModifyData
+      - cannotModifySystemState
+
+
+  # =========================
+  # FEDERÁCIA
+  # =========================
+  federation:
+    model: "recursive-zero-trust"
+
+    rules:
+      - everyCAICommunicatesAsClient
+      - noPrivilegedChannels
+      - allRequestsPassGatekeeper
+      - autonomyWithinPolicy
+
+
+  # =========================
+  # GOVERNANCE
+  # =========================
+  governance:
+    executionRights: "human-only"
+
+    principles:
+      - AIProvidesSignalsOnly
+      - noAutomaticBlocking
+      - humanMakesFinalDecision
