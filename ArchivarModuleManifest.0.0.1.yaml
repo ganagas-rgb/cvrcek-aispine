@@ -1,0 +1,138 @@
+apiVersion: cvrcek.spine/v3
+kind: ArchivarModuleManifest
+
+Envelope:
+  metadata:
+    name: "cvrcek-archivar-core"
+    version: "0.0.1"
+    author: "marek"
+    license: "Apache-2.0"
+    scope: "cluster_wide"
+    description: >
+      Centrálna pamäťová a RAG služba pre Cvrček Spine.
+      Archivár je špecializovaný WRK modul typu "central_data_store",
+      ktorý poskytuje jednotnú identitu, kontext, vektorové indexy,
+      auditné logy a age-rotovanú kryptografickú kontinuitu.
+
+  references:
+    naming_standard_ref: "cvrcek-naming-standard-1.0.0"
+    rrid_standard_ref: "RRIDStandard-0.3.5"
+    rag_global_ref: "cvrcek-rag-main-global-3.5.0"
+
+Payload:
+
+  spec:
+
+    architecture_role:
+      type: "specialized_wrk"
+      pattern: "central_data_store"
+      description: >
+        Archivár je pre Spine tým, čím je centrálna databáza pre aplikácie.
+        CAI a WRK moduly sa k nemu pripájajú cez definované rozhranie
+        bez duplikácie pamäťových alebo RAG kapacít.
+
+    # -------------------------------------------------------------
+    # ENVELOPE / PAYLOAD – jednotný formát pre celý Spine v3
+    # -------------------------------------------------------------
+    envelope_payload_model:
+
+      envelope:
+        description: "Auditná meta-obálka, spracovaná CAI."
+        visibility: "CAI-only"
+        fields:
+          - rrid_source
+          - rrid_target
+          - rrid_final
+          - timestamp
+          - depth_hops
+          - visited_rrids
+          - integrity_hash
+          - payload_hash
+          - audit_trace
+        naming: "Podľa naming_standard_ref"
+        processed_by: "CAI"
+        notes: >
+          Envelope je nemenná meta-vrstva. CAI nikdy nevidí payload.
+          Archivár ukladá envelope ako append-only audit artefakt.
+
+      payload:
+        description: "Obsah požiadavky, spracovaný WRK."
+        visibility: "WRK-only"
+        fields:
+          - rrid_payload
+          - sealed_with
+          - context
+          - data
+        naming: "Podľa naming_standard_ref"
+        processed_by: "WRK"
+        notes: >
+          Payload je nepriehľadný pre CAI. Archivár ukladá payload
+          výhradne vo forme age-šifrovaných artefaktov.
+
+    # -------------------------------------------------------------
+    # DATA TIERING
+    # -------------------------------------------------------------
+    data_tiering:
+
+      hot_layer:
+        storage: "RAM / tmpfs"
+        format: "Scratchpad / JSON"
+        purpose: "Rýchly kontext pre aktívne vlákna (SessionScratchpad)"
+        retention: "ephemeral"
+
+      warm_layer:
+        storage: "SQLite / Embedded DB"
+        format: "relational_metadata"
+        purpose: "Matrika, RRID registry, stav vlákien, auditné logy"
+        retention: "persistent_local"
+
+      cold_layer:
+        storage: "Vector DB / Local Storage"
+        format: "embeddings / chunks"
+        purpose: "Globálna znalostná báza (GlobalKnowledge / rag_global)"
+        retention: "long_term"
+
+      archive_layer:
+        storage: "POSIX filesystem / Compress Store"
+        format: "raw_envelope_payload_logs"
+        purpose: "Nemenné historické auditné stopy, rotované age kľúče"
+        retention: "immutable"
+
+    # -------------------------------------------------------------
+    # SERVICE ENDPOINTS
+    # -------------------------------------------------------------
+    service_endpoints:
+
+      rag_service:
+        description: "Sémantické vyhľadávanie a kontext pre CAI a WRK"
+        access: "read_only"
+        backends:
+          - "sqlite_metadata"
+          - "vector_db"
+
+      matrika_service:
+        description: "Správa anonymných identít (RRID) a registrácia modulov"
+        access: "read_write"
+        security: "age_key_rotation"
+
+      audit_logger:
+        description: "Ukladanie obálok (envelope) pre neskorší audit a rekonštrukciu"
+        access: "append_only"
+
+    # -------------------------------------------------------------
+    # AUDIT ENVELOPE STRUCTURE
+    # -------------------------------------------------------------
+    audit_envelope_structure:
+      meta:
+        rrid: "RRID požiadavky"
+        sha256: "Hash celého payloadu"
+        age_key_thumbprint: "SHA256 verejného age kľúča"
+        timestamp: "POSIX čas zápisu"
+        filename: "Podľa naming_standard_ref"
+
+status:
+  stable: true
+  notes: >
+    Archivár nevykonáva smerovanie ani rozhodovanie.
+    Poskytuje výhradne dáta na základe RRID/THREADID a dopytov z obálok.
+    Je jediným zdrojom pravdy pre identitu, kontext a auditnú históriu.
