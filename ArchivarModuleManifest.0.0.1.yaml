@@ -4,8 +4,8 @@ kind: ArchivarModuleManifest
 Envelope:
   metadata:
     name: "cvrcek-archivar-core"
-    version: "0.0.1"
-    author: "marek"
+    version: "0.0.2"
+    author: "ganagas-rgb"
     license: "Apache-2.0"
     scope: "cluster_wide"
     description: >
@@ -70,33 +70,45 @@ Payload:
           výhradne vo forme age-šifrovaných artefaktov.
 
     # -------------------------------------------------------------
-    # DATA TIERING
+    # DATA LIFECYCLE TIERING (DOPLNENÉ PODĽA PÔVODNÉHO NÁVRHU)
     # -------------------------------------------------------------
-    data_tiering:
+    data_lifecycle_tiers:
 
-      hot_layer:
-        storage: "RAM / tmpfs"
-        format: "Scratchpad / JSON"
-        purpose: "Rýchly kontext pre aktívne vlákna (SessionScratchpad)"
-        retention: "ephemeral"
+      hot:
+        retention: "2-3 dni"
+        path: "cvrcek-spine/runtime/spool/outbox/"
+        format: "Surový JSON payload + envelope (meta + rrid + sha256)"
+        purpose: "Okamžitý audit stopy a live operácie WRK/CAI."
+        notes: >
+          HOT vrstva je najrýchlejšia. Obsahuje najnovšie envelope/payload artefakty
+          pred presunom do WARM. Slúži na okamžitú rekonštrukciu requestov.
 
-      warm_layer:
-        storage: "SQLite / Embedded DB"
-        format: "relational_metadata"
-        purpose: "Matrika, RRID registry, stav vlákien, auditné logy"
-        retention: "persistent_local"
+      warm:
+        retention: "14 dní"
+        path: "cvrcek-spine/runtime/archive/warm/"
+        format: "Indexované JSON matice"
+        purpose: "Priamy zdroj dát pre lokálny JSON RAG."
+        notes: >
+          WARM vrstva je optimalizovaná pre rýchle čítanie. Lokálny Qwen/Phi-3
+          odtiaľto ťahá čerstvý kontext.
 
-      cold_layer:
-        storage: "Vector DB / Local Storage"
-        format: "embeddings / chunks"
-        purpose: "Globálna znalostná báza (GlobalKnowledge / rag_global)"
-        retention: "long_term"
+      cold:
+        retention: "30 dní"
+        path: "cvrcek-spine/runtime/archive/cold/"
+        format: "Komprimované štruktúry"
+        purpose: "Lokálna záloha, odpojená od indexovania do RAG knowledgebase."
+        notes: >
+          COLD vrstva je komprimovaná, ale stále lokálne dostupná. Slúži ako
+          strednodobá záloha pred archiváciou.
 
-      archive_layer:
-        storage: "POSIX filesystem / Compress Store"
-        format: "raw_envelope_payload_logs"
-        purpose: "Nemenné historické auditné stopy, rotované age kľúče"
-        retention: "immutable"
+      archive:
+        retention: ">30 dní"
+        path: "TSM / Pásky / Externé úložisko"
+        format: ".tar.gz / .zip zašifrované cez age"
+        purpose: "Dlhodobá archivácia podľa legislatívy."
+        notes: >
+          ARCHIVE vrstva je nemenná. Lokálny disk je po archivácii vyčistený (0B).
+          Dešifrovanie je možné len cez age kľúče z crypto_time_travel_matrix.
 
     # -------------------------------------------------------------
     # SERVICE ENDPOINTS
