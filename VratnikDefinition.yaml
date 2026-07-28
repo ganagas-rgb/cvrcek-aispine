@@ -1,0 +1,98 @@
+apiVersion: cvrcek.ai/v1
+kind: VratnikDefinition
+
+metadata:
+  name: "cvrcek-vratnik"
+  version: "0.3"
+  author: "ganagas-rgb"
+  license: "Apache-2.0"
+  description: >
+    Vrátnik je rýchla, prietoková vstupná brána Cvrček Spine architektúry.
+    Zabezpečuje sanitizáciu, jemnú normalizáciu, kontextový odhad adresáta
+    a štruktúrne rozdelenie textu. Obsahuje dvojstupňové overenie (fast-pass
+    a intervenčný kontrolór) pre zachovanie nízkej latencie a vysokej úrovne bezpečnosti.
+
+references:
+  architecture: "Cvrček Spine 0.3"
+  layer_position: "Pred CAI"
+  purpose: >
+    Stabilizovať a pripraviť vstup tak, aby CAI a centrálna Matrika dostávali
+    konzistentné, označené a bezpečné dáta s predpripraveným odhadom smerovania.
+
+pipeline:
+  - step: split_into_layers
+    active: true
+    description: >
+      Rýchle rozdelenie textu na štruktúrne vrstvy (meta, obsah, kontext)
+      pre zamedzenie driftu v routingu.
+    actions:
+      detect_embedded_metadata: true
+      fallback_layer: "obsah"
+
+  - step: gentle_normalization
+    active: true
+    description: >
+      Jemná, nenásilná a rýchla normalizácia vstupu (whitespace, case, základné preklepy).
+    actions:
+      whitespace_cleanup: true
+      safe_case_normalization: true
+      typo_correction: "basic"
+      unicode_stabilization: true
+      punctuation_repair: true
+
+  - step: sanitization
+    active: true
+    description: >
+      Dvojstupňová kontrola bezpečnosti. Prvý stupeň je prietokový (fast-pass).
+      V prípade incidentu nastupuje druhý stupeň (kontrolór), ktorý vygeneruje
+      odporúčania a vyžaduje potvrdenie od používateľa.
+    actions:
+      max_allowed_length: 50000
+      strip_html_tags: true
+      escape_control_characters: true
+      prompt_injection_protection: "basic"
+      on_failure: "trigger_kontrolor"
+      kontrolor:
+        active: true
+        generate_recommendations: true
+        hold_payload: true
+        require_user_confirmation: true
+        fallback_action: "reject"
+
+  - step: create_envelope
+    active: true
+    description: >
+      Vytvorenie auditovateľnej obálky (Envelope). Na základe identity zadávateľa
+      a rýchleho kontextového AI odhadu na vstupe priradí požiadavke odporúčaný
+      routing hint pre centrálnu Matriku.
+    actions:
+      inject_client_identity: true
+      fast_intent_classification: true
+      generate_rrid: true
+      fallback_routing_floor: "default"
+
+  - step: create_payload
+    active: true
+    description: >
+      Vytvorenie čistého, štruktúrovaného YAML payloadu pre CAI, ktorý je striktne
+      oddelený od smerovacej obálky.
+
+audit:
+  active: true
+  fields:
+    - timestamp
+    - rrid
+    - client_id
+    - predicted_intent_floor
+    - envelope_hash
+    - payload_hash
+    - normalization_profile
+    - pipeline_duration_ms
+    - kontrolor_interventions
+
+status:
+  stable: true
+  notes: >
+    Optimalizované pre vysokú priepustnosť a inteligentné pred-smerovanie.
+    Vrátnik odľahčuje centrálnu zbernicu tým, že Matrike posiela obálku
+    s už vyhodnoteným hrubým zámerom klienta.
