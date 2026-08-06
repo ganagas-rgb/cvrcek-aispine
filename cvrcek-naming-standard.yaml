@@ -1,0 +1,67 @@
+apiVersion: cvrcek.spine/v3
+kind: NamingStandardManifest
+
+metadata:
+  name: "cvrcek-naming-standard"
+  version: "0.0.1"
+  author: "marek"
+  license: "Apache-2.0"
+  scope: "cluster_wide"
+  description: >
+    Jednotný názvový štandard pre envelope/payload súbory v Cvrček Spine v3.
+    Manifest je nemenný invariant, na ktorý sa odvolávajú všetky ostatné
+    manifesty (CAI, WRK, Vrátnik, Archivár, Kontrolór, RAG).
+
+spec:
+
+  naming_standard:
+    description: >
+      Všetky envelope/payload artefakty musia používať jednotný názvový formát
+      s timestamp prefixom pre auditovanie, partitioning a monotónne radenie.
+
+    format: "TS_THREADID_REQID_TYPE.json"
+
+    fields:
+
+      TS:
+        description: "Timestamp vzniku súboru"
+        format: "YYYYMMDDHH24MISS"
+        example: "20260728032955"
+
+      THREADID:
+        description: "Lokálny identifikátor vlákna"
+        format: "16 hex znakov (64-bit entropia)"
+        example: "ab12f9c0d3e4b7a1"
+
+      REQID:
+        description: "Lokálny identifikátor požiadavky"
+        format: "16 hex znakov (64-bit entropia)"
+        example: "9c3e1b7a4f0d2e8b"
+
+      TYPE:
+        description: "Typ artefaktu"
+        allowed:
+          - "payload"
+          - "envelope"
+
+    examples:
+      - "20260728032955_ab12f9c0d3e4b7a1_9c3e1b7a4f0d2e8b_payload.json"
+      - "20260728032955_ab12f9c0d3e4b7a1_9c3e1b7a4f0d2e8b_envelope.json"
+
+    rationale: >
+      Timestamp prefix umožňuje partitioning a auditovanie.
+      Krátke ID poskytujú dostatočnú jedinečnosť.
+      Názvy ostávajú čitateľné, krátke a kompatibilné s POSIX tmpfs.
+      Plné SHA-256 hashe sú vyhradené pre integritu, nie pre názvy súborov.
+
+references:
+  rrid_standard: "RRIDStandard-0.3.5"
+  rag_global: "cvrcek-rag-main-global-3.5.0"
+  envelope_model: "cvrcek-envelope-1.4.0"
+
+status:
+  stable: true
+  notes: >
+    Manifest je nemenný invariant. Všetky ostatné manifesty sa odvolávajú
+    cez naming_standard_ref. Zmena formátu sa vykonáva iba cez novú verziu
+    NamingStandardManifest (napr. 1.1.0).
