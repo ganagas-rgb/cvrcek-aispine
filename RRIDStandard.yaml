@@ -1,0 +1,93 @@
+apiVersion: cvrcek.ai/v1
+kind: RRIDStandard
+
+envelope:
+  metadata:
+    name: "RRIDStandard"
+    version: "0.3.8"
+    author: "admin"
+    license: "Apache-2.0"
+    description: "RRID definícia upravená podľa správneho envelope/payload modelu Cvrček Spine. Envelope obsahuje iba metadata."
+
+payload:
+  identity:
+    rrid_base:
+      description: "Nemenná anonymná identita priradená pri prvej registrácii. RRID sa nikdy neprepisuje."
+      immutable: true
+      components:
+        - "random_entropy_seed"
+        - "cluster_salt"
+        - "immutable_uuid"
+
+    rrid_final:
+      description: "Derivovaná identita – meno a rodné číslo. Mení sa iba pri registrácii alebo reattach-e."
+      mutable: false
+      fields:
+        name:
+          formula: "RRID + node + pod + registration_timestamp"
+          note: "Mení sa iba pri registrácii alebo reattach-e."
+        birth_number:
+          formula: "hash(name + registration_timestamp)"
+          note: "Mení sa iba pri registrácii alebo reattach-e."
+
+  registration:
+    description: "Proces vytvorenia rrid_final. Jediný moment, keď sa generuje meno a rodné číslo."
+    triggers:
+      - "initial_registration"
+      - "reattach_after_failover"
+    effects:
+      - "new registration_timestamp"
+      - "new rrid_final.name"
+      - "new rrid_final.birth_number"
+      - "RRID base remains unchanged"
+
+  reattach:
+    description: "Re-registration of WRK under new CAI after failover. Reattach je súčasťou CAI succession mechaniky."
+    trigger:
+      - "CAI failover"
+      - "topology_change_detected"
+    effects:
+      - "new registration_timestamp"
+      - "new rrid_final.name"
+      - "new rrid_final.birth_number"
+      - "RRID base remains unchanged"
+      - "depth recalculated by CAI"
+      - "routing hints updated"
+
+  heartbeat:
+    description: "Stavový signál agenta. Heartbeat nikdy nemení identitu ani rrid_final."
+    intervals:
+      normal:
+        interval: "5-30s"
+        jitter: "10-25%"
+        purpose: "anti-cacty, anti-fingerprint, anti-timing-analysis"
+      forced:
+        interval: "5-60min"
+        jitter: "20-40%"
+        purpose: "integrity-check, CAI sanity-check"
+    identity_effects:
+      - "RRID: unchanged"
+      - "name: unchanged"
+      - "birth_number: unchanged"
+      - "depth: unchanged"
+
+  depth:
+    description: "Topologická pozícia v Spine DAG."
+    rules:
+      - "Depth sa priraďuje pri registrácii WRK pod CAI."
+      - "Depth sa recalculuje iba pri CAI failover-e alebo plánovanom handover-e."
+      - "Depth je deterministický, nie identitný atribút."
+
+  routing:
+    description: "Routing hints odvodené z depth-u a CAI endpointov."
+    update_conditions:
+      - "CAI failover"
+      - "reattach"
+      - "depth rebalance"
+
+  invariants:
+    - "RRID is immutable"
+    - "rrid_final changes only on registration or reattach"
+    - "heartbeat never modifies identity"
+    - "depth is recalculated only by CAI during failover"
+    - "reattach is not heartbeat"
