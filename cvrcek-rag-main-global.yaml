@@ -1,0 +1,16 @@
+apiVersion: cvrcek.spine/v3
+kind: GlobalKnowledgeManifest
+metadata:
+  name: "cvrcek-rag-main-global"
+  version: "3.0.0"
+  storage_type: "read_only_indexed_store"
+  scope: "cluster_wide"
+  access_mode: "read_only"
+
+spec:
+  purpose: "Hlavná globálna znalostná báza pre Agenta a všetky WRK uzly (pravidlá, manuály, exaktná infraštruktúra)."
+
+  features:
+    shared_access: "Prístupný pre všetkých agentov v klastri"
+    update_mechanism: "Kontrolovaný import verzovaných manifestov (Read-Only pre bežné WRK)"
+    llm_injection: "Injektáž hrubého kontextu do promptu pred spustením Phi-3"
