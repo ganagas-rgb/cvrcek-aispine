@@ -1,0 +1,165 @@
+apiVersion: cvrcek.spine/v3
+kind: PipelineOrchestratorManifest
+
+envelope:
+  metadata:
+    name: "cvrcek-ai-pipeline"
+    version: "1.3.0-prod"
+    author: "marek"
+    role: "AI Infra / Edge Node"
+    license: "Apache-2.0"
+    audience: "Cvrcek Federated Spine"
+    restriction: "not-for-kids-and-influence"
+    labels:
+      architecture: "modular-offline-first"
+      security: "pqc-zero-disk-trace"
+      indexing: "qindex-64-salted"
+      compliance: "eu-ai-act-gdpr-ready"
+      orchestration: "rke2-systemd-native"
+
+spec:
+  runtime:
+    orchestrator: "ksh93-POSIX"
+    isolation: "RKE2-Hardened-Runtime"
+    ipc: "POSIX_UNIX_PIPES"
+    telemetry: "STDIN-STDOUT-JSON"
+
+  rrid:
+    rrid_source: "cvrcek-ai-pipeline"
+    rrid_target: "wrk-quantum-envelope-gate-v3-pqc"
+    depth_hops: 0
+    visited_rrids: []
+    rrid_uniqueness_window_seconds: 300  # Zabraňuje opakovaniu rrid v 5-min okne
+
+  # ---------------------------------------------------------------------------
+  # 1. RETRY & EXECUTION POLICY (3-krát a dosť)
+  # ---------------------------------------------------------------------------
+  execution_policy:
+    mode: "StrictPipeline"
+    timeout_seconds: 45
+    on_timeout: "ABORT_AND_LOG"       # Nové: explicitná reakcia na timeout
+    retry_policy:
+      max_attempts: 3
+      backoff: "exponential"
+      circuit_breaker:
+        on_failure: "DISCARD_AND_ALERT"
+        on_circuit_open: "REJECT_NEW"  # Nové: odmietaj nové požiadavky pri otvorenom breakri
+    security:
+      air_gapped: true
+      allow_external_network: false
+      ipc_mechanism: "POSIX_UNIX_PIPES"
+      pqc_hardened: true
+
+  # ---------------------------------------------------------------------------
+  # 2. HARDWARE & RESOURCE BOUNDS (Edge / Tablet / RHEL)
+  # ---------------------------------------------------------------------------
+  resources:
+    cpu_limit: "2"
+    memory_limit: "512Mi"
+    swap_enabled: false
+
+  # ---------------------------------------------------------------------------
+  # 3. CRYPTOGRAPHIC INDEXING & PRE-DECRYPTION FILTER (QIndex-64)
+  # ---------------------------------------------------------------------------
+  qindex_spec:
+    engine: "c99_qindex_filter"
+    bit_width: 64
+    space_capacity: "2^64"
+    max_items_per_session: 50000      # Nové: ochrana pred fill-up efektom
+    salt_generation:
+      source: "metadata_entropy"
+      formula: "SHA-256(session_created_at + session_uuid)"
+      folding_method: "XOR-64bit"
+    features:
+      blind_search_enabled: true
+      rebuildable_from_metadata: true
+      salt_fingerprint_stored: true   # Nové: ukladá sa fingerprint saltu, nie salt
+
+  # ---------------------------------------------------------------------------
+  # 4. ISOLATED RAG & SECURITY ARCHITECTURE (3 zóny)
+  # ---------------------------------------------------------------------------
+  rag_architecture:
+
+    # ZÓNA A: Statická KB (Read-Only)
+    rag_static:
+      enabled: true
+      type: "VectorStore"
+      access_mode: "ReadOnly"
+      storage_path: "/var/lib/cvrcek/knowledge_base"
+      description: "Overená firemná KB bez PII."
+
+    # ZÓNA B: Session DMZ (tmpfs RAM)
+    rag_tmp:
+      enabled: true
+      storage_type: "tmpfs"
+      mount_path: "/dev/shm/rag_session"
+      size_limit: "64Mi"
+      life_cycle: "SessionBound"
+
+      processing_pipeline:
+        - step: 1
+          name: "QIndex_PreFilter"
+          action: "MicrosecondDrop"
+          engine: "c99_qindex_filter"
+          mode: "FastPass"
+
+        - step: 2
+          name: "PQC_Decryption"
+          engine: "age-pqc"
+          algorithm: "ML-KEM-768"
+          key_source: "/etc/cvrcek/pqc_identity.key"
+
+        - step: 2.5
+          name: "IntegrityCheck"                # Nové: sanity check po dešifrovaní
+          action: "ValidateStructureAndMAC"
+          rules: ["PAYLOAD_STRUCTURE", "ENVELOPE_HMAC"]
+          on_violation: "ABORT_THREAD"
+
+        - step: 3
+          name: "Anonymizer"
+          action: "StripPII"
+          rules: ["IBAN", "SSN_ID", "PERSONAL_NAMES", "EMAIL"]
+          token_replacement: "TOKEN_UUID_V4"
+
+        - step: 4
+          name: "Sanitization"
+          action: "PromptInjectionFilter"
+          rules: ["JAILBREAK_DETECTION", "ROLEPLAY_BYPASS", "SYSTEM_PROMPT_LEAK"]
+          on_violation: "ABORT_THREAD"
+
+    # ZÓNA C: EU AI Act & GDPR Audit Log
+    rag_thread:
+      enabled: true
+      audit_logging:
+        compliance:
+          eu_ai_act: "Article 12 - Automated Record-Keeping"
+          gdpr: "Right to be Forgotten via PQC Key Shredding"
+
+        envelope_metadata_unencrypted:
+          rrid: "x-cvrcek-run-id"
+          aithreadid: "x-ai-thread-id"
+          session_created_at: "ISO8601"
+          qindex64_fingerprint: "HEX64"
+          qindex_salt_fingerprint: "HEX64"   # Nové: fingerprint saltu pre audit
+
+        payload_storage:
+          encrypted: true
+          encryption_algorithm: "ML-KEM-768"
+          contains_raw_pii: true
+          pii_note: "PII je výlučne v šifrovanej obálke, nie v logovanom texte"  # Nové: explicitné
+
+        target: "AuditStream"
+        log_format: "StructuredJSON"
+        retention_days: 90
+
+  # ---------------------------------------------------------------------------
+  # 5. IN-MEMORY PIPELINE (POSIX PIPES)
+  # ---------------------------------------------------------------------------
+  pipeline_stream:
+    shell_engine: "ksh93"
+    transport: "POSIX_Pipes"
+    sequence:
+      - "c99_qindex_filter --bits 64 --salt-from-meta"
+      - "age -d -i /etc/cvrcek/pqc_identity.key"
+      - "cvrcek_anonymize --tmpfs /dev/shm/rag_session"
+      - "ollama_runner --model deepseek-r1-local"
